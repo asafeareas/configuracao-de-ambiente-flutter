@@ -11,13 +11,17 @@ lib/
 │   ├── usuario.dart               # Model do Usuário
 │   ├── documento.dart             # Model do Documento
 │   └── services/                  # (Fase 2) persistência
+│       ├── preferences_service.dart
+│       ├── banco_local_service.dart
+│       └── documento_storage_service.dart
 ├── viewmodels/
 │   ├── auth_viewmodel.dart        # Login, cadastro, sessão e tema
-│   └── documentos_viewmodel.dart  # Lista e operações dos documentos
+│   └── documentos_viewmodel.dart  # Lista e operações CRUD dos documentos
 ├── views/
 │   ├── login_view.dart            # Rota: /
 │   ├── cadastro_view.dart         # Rota: /cadastro
-│   └── home_view.dart             # Rota: /home
+│   ├── home_view.dart             # Rota: /home
+│   └── editor_view.dart           # Rota: /editor (Fase 2)
 └── utils/
     └── validadores.dart           # Validação de Nome, E-mail e Senha
 ```
@@ -137,6 +141,30 @@ Pontos onde isso é usado:
 - `main.dart`: `ListenableBuilder(listenable: authViewModel)` em volta do `MaterialApp` → troca de `themeMode` em tempo real.
 - `login_view.dart` / `cadastro_view.dart`: formulário reage a `senhaVisivel`, `carregando` e `erro`.
 - `home_view.dart`: a lista reage a `DocumentosViewModel` (adicionar, remover, filtrar); o ícone de tema reage ao `AuthViewModel`.
+
+---
+
+## Fase 2 — CRUD e Persistência Local
+
+Como o app roda no alvo **Web** (`web-server`), não usamos `sqflite`. A persistência segue o padrão **Repository/Service** com `shared_preferences` (no navegador, os dados ficam no `localStorage`).
+
+| Arquivo | Responsabilidade |
+|---|---|
+| `models/services/preferences_service.dart` | Chave-valor simples: `bool` do tema (`pref_modo_escuro`) e `String` com o e-mail da sessão (`pref_sessao_email`). |
+| `models/services/banco_local_service.dart` | "Banco local" de **usuários**: lista de `Usuario` serializada em JSON (`db_usuarios`), com inserir/buscar/atualizar/remover. |
+| `models/services/documento_storage_service.dart` | **CRUD de documentos**: `listar` (Read), `criar` (Create), `atualizar` (Update), `excluir` (Delete). A lista de `Documento` é convertida com `jsonEncode`/`jsonDecode` (`dart:convert`) e salva como String (`db_documentos`). |
+| `views/editor_view.dart` | 4ª tela (rota `/editor`): cria um documento novo (sem argumento) ou edita um existente (`Navigator.pushNamed(context, '/editor', arguments: documento)`). |
+
+O que mudou nas outras camadas:
+
+- **`AuthViewModel`** recebe `BancoLocalService` e `PreferencesService` pelo construtor. Ganhou `carregarPreferencias()` (chamado no `main()` antes do `runApp`), que restaura **tema** e **sessão**. `alternarTema()`, `login()` e `logout()` agora gravam nas preferências.
+- **`DocumentosViewModel`** recebe `DocumentoStorageService`. Métodos: `carregar(email)`, `criar()`, `atualizar()`, `excluir()`, `filtrar()`, `limpar()`. Expõe `carregando`, `salvando` e `erro` para a View. Cada usuário só vê os próprios documentos (`autorEmail`).
+- **`main.dart`** passou a usar `onGenerateRoute` (para passar o `Documento` como argumento ao `/editor` e redirecionar para o login se não houver sessão). A rota inicial é `/home` se já existir sessão salva.
+- As Views continuam sem `setState()`; a tela do editor escuta `salvando` via `ListenableBuilder`.
+
+**Validação:** criar/editar/excluir documentos e trocar o tema, depois recarregar o preview (F5) — os documentos, o tema e a sessão permanecem. Testes automatizados em `test/documentos_viewmodel_test.dart` simulam esse "recarregar" criando novas instâncias dos ViewModels.
+
+> Observação: por ser um projeto didático, a senha é salva em texto puro no `localStorage`. Em produção deve-se usar um backend de autenticação ou, no mínimo, hash da senha.
 
 ---
 

@@ -1,11 +1,18 @@
 import 'package:flutter/foundation.dart';
 
+import '../models/services/banco_local_service.dart';
+import '../models/services/preferences_service.dart';
 import '../models/usuario.dart';
 
-/// VIEWMODEL: autenticação e cadastro.
-/// Fase 1: usuários mantidos em memória (como no DartPad).
+/// VIEWMODEL: autenticação, cadastro e carregamento de preferências
+/// (tema e sessão). Persiste via BancoLocalService e PreferencesService.
 class AuthViewModel extends ChangeNotifier {
-  final List<Usuario> _usuarios = [];
+  final BancoLocalService _banco;
+  final PreferencesService _preferencias;
+
+  AuthViewModel({BancoLocalService? banco, PreferencesService? preferencias})
+      : _banco = banco ?? BancoLocalService(),
+        _preferencias = preferencias ?? PreferencesService();
 
   Usuario? _usuarioLogado;
   bool _carregando = false;
@@ -14,19 +21,32 @@ class AuthViewModel extends ChangeNotifier {
   bool _modoEscuro = false;
 
   Usuario? get usuarioLogado => _usuarioLogado;
+  bool get estaLogado => _usuarioLogado != null;
   bool get carregando => _carregando;
   String? get erro => _erro;
   bool get senhaVisivel => _senhaVisivel;
   bool get modoEscuro => _modoEscuro;
+
+  /// Chamado no main() antes do runApp: restaura tema e sessão salvos.
+  Future<void> carregarPreferencias() async {
+    _modoEscuro = await _preferencias.lerModoEscuro();
+    final email = await _preferencias.lerSessaoEmail();
+    if (email != null) {
+      _usuarioLogado = await _banco.buscarUsuarioPorEmail(email);
+      if (_usuarioLogado == null) await _preferencias.limparSessao();
+    }
+    notifyListeners();
+  }
 
   void alternarVisibilidadeSenha() {
     _senhaVisivel = !_senhaVisivel;
     notifyListeners();
   }
 
-  void alternarTema() {
+  Future<void> alternarTema() async {
     _modoEscuro = !_modoEscuro;
     notifyListeners();
+    await _preferencias.salvarModoEscuro(_modoEscuro);
   }
 
   void limparErro() {
@@ -37,31 +57,33 @@ class AuthViewModel extends ChangeNotifier {
 
   Future<bool> login(String email, String senha) async {
     _iniciar();
-    await Future.delayed(const Duration(milliseconds: 300));
     final emailNorm = email.trim().toLowerCase();
-    final usuario = _usuarios.where((u) => u.email == emailNorm).firstOrNull;
+    final usuario = await _banco.buscarUsuarioPorEmail(emailNorm);
     if (usuario == null || usuario.senha != senha) {
       return _finalizar(erro: 'E-mail ou senha inválidos');
     }
     _usuarioLogado = usuario;
+    await _preferencias.salvarSessaoEmail(usuario.email);
     return _finalizar();
   }
 
   Future<bool> cadastrar(String nome, String email, String senha) async {
     _iniciar();
-    await Future.delayed(const Duration(milliseconds: 300));
     final emailNorm = email.trim().toLowerCase();
-    if (_usuarios.any((u) => u.email == emailNorm)) {
+    if (await _banco.buscarUsuarioPorEmail(emailNorm) != null) {
       return _finalizar(erro: 'Já existe um usuário com este e-mail');
     }
-    _usuarios.add(Usuario(nome: nome.trim(), email: emailNorm, senha: senha));
+    await _banco.inserirUsuario(
+      Usuario(nome: nome.trim(), email: emailNorm, senha: senha),
+    );
     return _finalizar();
   }
 
-  void logout() {
+  Future<void> logout() async {
     _usuarioLogado = null;
     _senhaVisivel = false;
     notifyListeners();
+    await _preferencias.limparSessao();
   }
 
   void _iniciar() {

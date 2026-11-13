@@ -3,6 +3,8 @@
 Aplicativo Flutter (alvo Web) com Login, Cadastro, lista de documentos e tema claro/escuro, organizado em **MVVM** (Model–View–ViewModel).
 
 - Relatório de migração arquitetural: **[ARQUITETURA.md](ARQUITETURA.md)**
+- Fase 1 (migração MVVM, sem persistência): tag [`fase-1`](../../tree/fase-1)
+- Fase 2 (CRUD + persistência com `shared_preferences`): branch `main`
 
 ## Ambiente
 
